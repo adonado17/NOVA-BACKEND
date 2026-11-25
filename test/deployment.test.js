@@ -20,15 +20,30 @@ test('readiness deja de aceptar tráfico cuando MongoDB no está conectado', asy
   }
 });
 
-test('producción falla al iniciar si el despliegue no contiene Angular compilado', () => {
+test('producción carga la API sin depender de Angular compilado', () => {
   const result = spawnSync(process.execPath, ['-e', `
-    require('node:fs').existsSync = () => false;
-    require('./src/app');
+    const assert = require('node:assert/strict');
+    const request = require('supertest');
+    const app = require('./src/app');
+    (async () => {
+      assert.equal((await request(app).get('/api/health')).status, 200);
+      const page = await request(app).get('/login');
+      assert.equal(page.status, 404);
+      assert.deepEqual(page.body, { message: 'Ruta no encontrada.' });
+    })().catch(() => { process.exitCode = 1; });
   `], {
     cwd: require('node:path').resolve(__dirname, '..'),
     env: { ...process.env, NODE_ENV: 'production' },
     encoding: 'utf8',
   });
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Falta compilar Angular para producción/);
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('la API no publica las páginas ni los recursos del frontend', async () => {
+  for (const route of ['/', '/login', '/register', '/profile', '/reservations', '/registro.html', '/css/styles.css']) {
+    const response = await request(app).get(route);
+    assert.equal(response.status, 404);
+    assert.match(response.headers['content-type'], /application\/json/);
+    assert.deepEqual(response.body, { message: 'Ruta no encontrada.' });
+  }
 });

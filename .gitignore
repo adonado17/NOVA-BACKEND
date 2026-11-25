@@ -4,3 +4,13 @@ node_modules/
 !.env.example
 coverage/
 *.log
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ed25519
+.aws/
+.npmrc
+outputs/

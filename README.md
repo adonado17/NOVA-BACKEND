@@ -1,90 +1,98 @@
-# NOVA Studio - API de cuentas y citas
+# NOVA Backend
 
-Esta API de Node.js está integrada en el repositorio de NOVA Studio. Atiende al frontend Angular y conserva una versión HTML de respaldo. Incluye autenticación de clientes y conexión con MongoDB Atlas.
+API independiente de NOVA Studio, construida con Node.js, Express y MongoDB Atlas. Gestiona cuentas de clientes y solicitudes de cita. La interfaz Angular se mantiene en [NOVA-FRONTEND](https://github.com/adonado17/NOVA-FRONTEND).
 
-## Qué hace
+## Funciones
 
-- Conecta Express a MongoDB Atlas mediante Mongoose.
-- Registra usuarios con nombre, correo y contraseña.
-- Valida los datos con `express-validator`.
-- Guarda únicamente un hash de la contraseña con `bcryptjs`.
-- Inicia sesión y entrega un token JWT con vigencia de 2 horas.
-- Protege la ruta de perfil con el token.
-- Permite crear, listar, consultar, editar y eliminar solicitudes de cita del usuario autenticado.
-- Devuelve errores claros sin exponer contraseñas ni detalles internos.
+- Registro con validación y hash de contraseña mediante bcrypt.
+- Inicio de sesión y perfil protegido con JWT de dos horas de vigencia.
+- Crear, listar, consultar, actualizar y eliminar las solicitudes de cita propias.
+- Comprobación de salud y disponibilidad de la conexión a MongoDB.
+- CORS con lista explícita de orígenes para conectar el frontend separado.
 
-El código separa `src/routes/` (endpoints), `src/controllers/` (operaciones), `src/validators/` (reglas de entrada), `src/middleware/` (validación y autorización), `src/models/` (esquemas de usuario y reserva) y `src/config/` (conexión a MongoDB y servicios).
+Las solicitudes quedan pendientes de confirmación. La gestión administrativa de servicios y la confirmación de disponibilidad no están implementadas.
 
-## Requisitos
+## Instalación y ejecución local
 
-- Node.js 24 LTS y npm.
-- Un clúster gratuito M0 de MongoDB Atlas.
-- Un usuario de base de datos y la IP actual autorizada en Atlas.
-- Postman para mostrar los endpoints en el video.
+Se requiere Node.js 24.15 o posterior dentro de la versión 24, npm y una conexión MongoDB Atlas con usuario de base de datos e IP autorizada.
 
-## Preparación local
-
-En PowerShell, dentro de esta carpeta:
+Ejecuta los comandos desde la raíz de este repositorio:
 
 ```powershell
 npm ci
 Copy-Item .env.example .env
 ```
 
-Abre `.env` y reemplaza `MONGODB_URI` por la cadena de conexión de Atlas. Elige un `JWT_SECRET` aleatorio de al menos 32 caracteres. Si la contraseña del usuario de base de datos tiene caracteres especiales, codifícalos para una URL al ponerla en la cadena. Nunca compartas el archivo `.env` ni lo subas a GitHub.
+Completa las variables de tu archivo privado `.env`:
 
-Después ejecuta:
+| Variable | Uso |
+| --- | --- |
+| `PORT` | Puerto del servidor; predeterminado: `3000`. |
+| `MONGODB_URI` | URI privada de MongoDB Atlas. Codifica los caracteres especiales de la contraseña si la URI los requiere. |
+| `JWT_SECRET` | Secreto aleatorio de al menos 32 caracteres para firmar y verificar los tokens. Reemplaza el marcador del ejemplo. |
+| `CORS_ORIGINS` | Orígenes completos del frontend permitidos, separados por comas, sin rutas. |
 
 ```powershell
 npm start
 ```
 
-La consola debe mostrar `NOVA API en http://localhost:3000`. Compila Angular con `npm run build` desde la raíz antes de abrir esa dirección para usar el frontend principal. La ruta `GET /api/health` debe devolver `"database": "connected"`.
+La API escucha en `http://localhost:3000`. Para reiniciar automáticamente al guardar cambios, utiliza `npm run dev`.
+
+El servidor conecta primero con MongoDB y luego empieza a aceptar peticiones. Al recibir `SIGTERM` o `SIGINT`, deja de aceptar conexiones y cierra la conexión de base de datos. Este repositorio no necesita una compilación de Angular para arrancar; sus rutas publican JSON, no páginas HTML.
+
+## Conexión con el frontend y CORS
+
+Si `CORS_ORIGINS` no está definida, se permiten `http://localhost:4200` y `http://127.0.0.1:4200`. Una lista configurada reemplaza esos valores. Por ejemplo:
+
+```dotenv
+CORS_ORIGINS=http://localhost:4200,http://127.0.0.1:4200
+```
+
+Para producción, establece el origen HTTPS real donde publiques NOVA-FRONTEND. El origen incluye protocolo, nombre y puerto cuando corresponda; no incluye la ruta de una página. No se aceptan comodines ni credenciales dentro del origen. Una lista vacía no autoriza orígenes cruzados.
+
+La API responde al preflight de los métodos `GET`, `HEAD`, `POST`, `PUT`, `DELETE` y `OPTIONS`, y admite las cabeceras `Authorization` y `Content-Type`. Refleja únicamente el origen permitido y añade `Vary: Origin`; no habilita cookies mediante `Access-Control-Allow-Credentials`. Un origen no permitido recibe `403`. Las llamadas sin cabecera `Origin`, como las habituales de Postman, siguen disponibles.
+
+CORS controla el acceso de navegadores entre orígenes; las operaciones protegidas continúan exigiendo JWT y autorización por usuario. El frontend debe apuntar a la dirección de esta API mediante su configuración de URL o un proxy de desarrollo. Las rutas conservan el prefijo `/api`.
 
 ## Endpoints
 
-| Método | Ruta | Para qué sirve | Respuesta esperada |
-| --- | --- | --- | --- |
-| GET | `/api/health` | Confirma API y conexión a MongoDB | 200 |
-| POST | `/api/auth/register` | Registra un usuario | 201 |
-| POST | `/api/auth/login` | Autentica y entrega JWT | 200 |
-| GET | `/api/auth/me` | Devuelve perfil con token Bearer | 200 |
-| GET | `/api/reservations` | Lista las solicitudes propias | 200 |
-| GET | `/api/reservations/:id` | Consulta una solicitud propia | 200 |
-| POST | `/api/reservations` | Crea una solicitud pendiente | 201 |
-| PUT | `/api/reservations/:id` | Actualiza una solicitud propia | 200 |
-| DELETE | `/api/reservations/:id` | Elimina una solicitud propia | 204 |
+| Método | Ruta | Respuesta |
+| --- | --- | --- |
+| GET | `/api/health` | `200`, estado de la API y conexión a MongoDB. |
+| GET | `/api/ready` | `200` si MongoDB está conectado; `503` en otro caso. |
+| POST | `/api/auth/register` | `201`, usuario público y JWT. |
+| POST | `/api/auth/login` | `200`, usuario público y JWT. |
+| GET | `/api/auth/me` | `200`, perfil del usuario autenticado. |
+| GET | `/api/reservations` | `200`, solicitudes propias. |
+| GET | `/api/reservations/:id` | `200`, una solicitud propia. |
+| POST | `/api/reservations` | `201`, nueva solicitud pendiente. |
+| PUT | `/api/reservations/:id` | `200`, solicitud propia actualizada. |
+| DELETE | `/api/reservations/:id` | `204`, solicitud propia eliminada. |
 
-Ejemplo de cuerpo JSON para registro:
+Registro: envía `name`, `email` y `password` en JSON. Inicio de sesión: envía `email` y `password`. Para el perfil y todas las operaciones de citas, utiliza `Authorization: Bearer TU_TOKEN`.
 
-```json
-{
-  "name": "Cliente NOVA",
-  "email": "cliente.nova@example.com",
-  "password": "Clave12345"
-}
-```
+Crear o editar una cita requiere `service` (`limpieza`, `hidratacion`, `masaje` o `corporal`) y `scheduledAt` (fecha ISO futura); `notes` es opcional y admite hasta 500 caracteres. El servidor asigna el propietario desde el token. Una solicitud ajena o inexistente devuelve `404`; un token ausente o inválido, `401`; los datos inválidos, `422`; y un correo ya registrado, `409`.
 
-Para iniciar sesión se envían únicamente `email` y `password`. Para consultar el perfil se envía `Authorization: Bearer TU_TOKEN`.
+## Organización y pruebas
 
-El correo duplicado devuelve 409, los datos inválidos 422, la contraseña incorrecta o el token ausente 401. Una solicitud ajena o inexistente devuelve 404. Para crear o editar una cita se envían `service` (`limpieza`, `hidratacion`, `masaje` o `corporal`), `scheduledAt` (fecha ISO futura) y `notes` (opcional, máximo 500 caracteres). La solicitud no implica confirmación de disponibilidad.
-
-## Pruebas con Postman
-
-Importa `postman/NOVA-Studio.postman_collection.json`. La colección contiene trece peticiones en orden. El registro válido crea un correo de prueba nuevo y guarda el token; las últimas cinco peticiones crean, consultan, editan y eliminan una solicitud de prueba. Ejecuta cada petición para entender su respuesta o usa `Run collection` para probarlas juntas.
-
-## Comprobación automática
+`src/routes/` define endpoints; `controllers/` ejecuta operaciones; `validators/` define las reglas de entrada; `middleware/` contiene CORS, validación y autenticación; `models/` describe usuarios y citas; `config/` reúne conexión y configuración del negocio. `src/app.js` configura Express y `src/server.js` inicia el proceso.
 
 ```powershell
 npm test
 ```
 
-Las pruebas simulan las operaciones de los modelos en memoria. No necesitan credenciales de Atlas ni descargan MongoDB. Cubren autenticación y el CRUD de solicitudes, incluida la separación por usuario. La conexión real a Atlas se verifica por separado con `/api/health` al iniciar la API.
+Las pruebas usan modelos simulados en memoria, sin credenciales de Atlas. Cubren autenticación, CRUD y separación por usuario, disponibilidad, ejecución de producción sin frontend y CORS con orígenes permitidos/rechazados y preflight. La conexión real a Atlas se comprueba por separado con `/api/health` y `/api/ready` al ejecutar el servidor.
 
-## Relación con el proyecto frontend
+Para pruebas manuales, importa `postman/NOVA-Studio.postman_collection.json` y ajusta su dirección base al servidor que quieras revisar.
 
-La aplicación en `frontend/` presenta la marca y sus servicios. Express sirve la compilación Angular en `/`, `/login`, `/register`, `/profile` y `/reservations`; las direcciones antiguas `.html` redirigen a las rutas Angular. Si no existe una compilación, Express muestra la versión HTML anterior. El frontend usa `/api` para autenticación y solicitudes de cita. La portada dirige a los usuarios a la pantalla de citas. La gestión de servicios y la confirmación administrativa de citas están pendientes.
+## Preparación para un servidor EC2
 
-## Entrega de la actividad
+La separación de repositorios no modifica el despliegue AWS existente. Para publicar este backend por separado, prepara su directorio propio e instala únicamente dependencias de producción con `npm ci --omit=dev`.
 
-La entrega incluye el repositorio con ramas y commits, un video que muestra los endpoints en Postman y un PDF con los enlaces y un resumen ejecutivo.
+Un servicio de sistema debe usar como `WorkingDirectory` la raíz de NOVA-BACKEND y ejecutar `node /RUTA/NOVA-BACKEND/src/server.js`. Configura `NODE_ENV=production`, `PORT`, `MONGODB_URI`, `JWT_SECRET` y `CORS_ORIGINS` mediante el entorno privado del servidor. Si utilizas Node 24 con un ejecutable específico del sistema, configura esa ruta en `ExecStart`.
+
+Nginx puede publicar HTTPS y reenviar a `http://127.0.0.1:3000`. Autoriza la IP de salida del servidor en Atlas y configura en el frontend la URL HTTPS de la API. Verifica `/api/ready` antes de enviar tráfico; no expongas el puerto interno de Node si el acceso público pasa por el proxy.
+
+## Variables privadas
+
+No publiques `.env`, contraseñas, tokens, claves privadas ni credenciales AWS. `.env.example` contiene solo marcadores de configuración. `.gitignore` excluye variables privadas, dependencias, claves habituales y resultados locales. Mantén los secretos reales fuera del repositorio y de cualquier archivo de entrega.

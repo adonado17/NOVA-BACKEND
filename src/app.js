@@ -1,12 +1,12 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const path = require('path');
-const fs = require('fs');
+const createCors = require('./middleware/cors');
 const authRoutes = require('./routes/auth');
 const reservationRoutes = require('./routes/reservations');
 
 const app = express();
 app.disable('x-powered-by');
+app.use('/api', createCors());
 app.use(express.json({ limit: '16kb' }));
 
 app.get('/api/health', (req, res) => {
@@ -24,29 +24,6 @@ app.get('/api/ready', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/reservations', reservationRoutes);
-
-const frontend = path.resolve(__dirname, '../..');
-const angularFrontend = path.join(frontend, 'frontend', 'dist', 'frontend', 'browser');
-if (process.env.NODE_ENV === 'production' && !fs.existsSync(path.join(angularFrontend, 'index.html'))) {
-  throw new Error('Falta compilar Angular para producción. Ejecuta npm run build antes de desplegar.');
-}
-if (fs.existsSync(path.join(angularFrontend, 'index.html'))) {
-  app.use(express.static(angularFrontend, { index: false }));
-  for (const route of ['/', '/login', '/register', '/profile', '/reservations']) {
-    app.get(route, (req, res) => res.sendFile(path.join(angularFrontend, 'index.html')));
-  }
-  app.get('/registro.html', (req, res) => res.redirect(302, '/register'));
-  app.get('/iniciar-sesion.html', (req, res) => res.redirect(302, '/login'));
-  app.get('/perfil.html', (req, res) => res.redirect(302, '/profile'));
-} else {
-  app.use('/css', express.static(path.join(frontend, 'css')));
-  app.use('/img', express.static(path.join(frontend, 'img')));
-  app.use('/js', express.static(path.join(frontend, 'js')));
-  app.get('/', (req, res) => res.sendFile(path.join(frontend, 'index.html')));
-  for (const page of ['registro.html', 'iniciar-sesion.html', 'perfil.html']) {
-    app.get(`/${page}`, (req, res) => res.sendFile(path.join(frontend, page)));
-  }
-}
 
 app.use((req, res) => res.status(404).json({ message: 'Ruta no encontrada.' }));
 app.use((error, req, res, next) => {
